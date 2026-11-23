@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">{{ page.desc }}</p>
+  <h2 class="print-only">{{ tab_labels[tab] }}</h2>
+</section>
+
+<div class="toolbar no-print">
+  <nav class="tabs" aria-label="명부 구분">
+    {% for key, label in tab_labels.items() %}
+      <a class="tab {{ 'active' if key == tab }}" href="{{ url_for('officers.roster', tab=key) }}">
+        {{ label }} <span class="count">{{ counts[key] }}</span>
+      </a>
+    {% endfor %}
+  </nav>
+  <div class="actions">
+    <button type="button" class="btn primary"
+            data-open-add="{{ 'president-dialog' if tab == 'presidents' else 'officer-dialog' }}">+ 추가</button>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+    <button type="button" class="btn" disabled
+            title="기타서류 화면을 만들면 연결됩니다 (태그: 명부)">명부철 보기</button>
+  </div>
+</div>
+
+{% if tab == 'presidents' %}
+  {% if presidents %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr>
+        <th class="narrow">대수</th><th>재임기간</th><th>회장</th><th>부회장</th>
+        <th class="no-print actions-col">편집</th>
+      </tr></thead>
+      <tbody>
+      {% for p in presidents %}
+        <tr>
+          <td>{{ p.generation }}대</td>
+          <td>{{ p.period or '' }}</td>
+          <td>{{ p.president }}</td>
+          <td>{{ p.vice_president or '' }}</td>
+          <td class="no-print actions-col">
+            <button type="button" class="btn small" data-open-edit="president-dialog"
+                    data-id="{{ p.id }}" data-generation="{{ p.generation }}"
+                    data-period="{{ p.period or '' }}" data-president="{{ p.president }}"
+                    data-vice-president="{{ p.vice_president or '' }}">수정</button>
+            <form method="post" action="{{ url_for('officers.president_delete', pid=p.id) }}"
+                  data-confirm="{{ p.generation }}대 회장단을 삭제할까요?">
+              <input type="hidden" name="tab" value="presidents">
+              <button class="btn small danger">삭제</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>등록된 회장단이 없습니다. 오른쪽 위 [+ 추가]로 1대부터 입력해 보세요.</p></div>
+  {% endif %}
+{% else %}
+  {% if officers %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr>
+        <th>직위</th><th>성명</th><th>근무처</th><th>이메일</th>
+        <th class="no-print actions-col">편집</th>
+      </tr></thead>
+      <tbody>
+      {% for o in officers %}
+        <tr>
+          <td>{{ o.position }}</td>
+          <td>{{ o.name }}</td>
+          <td>{{ o.workplace or '' }}</td>
+          <td>{% if o.email %}<a href="mailto:{{ o.email }}">{{ o.email }}</a>{% endif %}</td>
+          <td class="no-print actions-col">
+            <form method="post" action="{{ url_for('officers.move', officer_id=o.id) }}">
+              <input type="hidden" name="tab" value="{{ tab }}">
+              <button class="btn small icon" name="dir" value="up" title="위로"
+                      aria-label="위로 이동" {{ 'disabled' if loop.first }}>▲</button>
+              <button class="btn small icon" name="dir" value="down" title="아래로"
+                      aria-label="아래로 이동" {{ 'disabled' if loop.last }}>▼</button>
+            </form>
+            <button type="button" class="btn small" data-open-edit="officer-dialog"
+                    data-id="{{ o.id }}" data-position="{{ o.position }}" data-name="{{ o.name }}"
+                    data-workplace="{{ o.workplace or '' }}" data-email="{{ o.email or '' }}">수정</button>
+            <form method="post" action="{{ url_for('officers.delete', officer_id=o.id) }}"
+                  data-confirm="{{ o.name }} 님을 삭제할까요?">
+              <input type="hidden" name="tab" value="{{ tab }}">
+              <button class="btn small danger">삭제</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>등록된 {{ tab_labels[tab] }}이(가) 없습니다. 오른쪽 위 [+ 추가]로 첫 항목을 등록하세요.</p></div>
+  {% endif %}
+{% endif %}
+
+<dialog id="officer-dialog" data-add-url="{{ url_for('officers.add') }}"
+        data-edit-url="{{ url_for('officers.edit', officer_id=0) }}"
+        data-add-title="{{ tab_labels[tab] }} 추가" data-edit-title="{{ tab_labels[tab] }} 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <label>직위
+      <input name="position" list="position-hints" required maxlength="40" autocomplete="off">
+    </label>
+    <label>성명
+      <input name="name" required maxlength="40" autocomplete="off">
+    </label>
+    <label>근무처
+      <input name="workplace" maxlength="80" autocomplete="off">
+    </label>
+    <label>이메일
+      <input name="email" type="email" maxlength="80" autocomplete="off">
+    </label>
+    <datalist id="position-hints">
+      {% for h in position_hints %}<option value="{{ h }}">{% endfor %}
+    </datalist>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="president-dialog" data-add-url="{{ url_for('officers.president_add') }}"
+        data-edit-url="{{ url_for('officers.president_edit', pid=0) }}"
+        data-add-title="회장단 추가" data-edit-title="회장단 수정"
+        data-next-generation="{{ next_generation }}">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <input type="hidden" name="tab" value="presidents">
+    <label>대수 (숫자만)
+      <input name="generation" type="number" min="1" max="99" required>
+    </label>
+    <label>재임기간
+      <input name="period" maxlength="60" placeholder="예: 2019.1 ~ 2020.12" autocomplete="off">
+    </label>
+    <label>회장
+      <input name="president" required maxlength="40" autocomplete="off">
+    </label>
+    <label>부회장
+      <input name="vice_president" maxlength="80" autocomplete="off">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% from "_forms.html" import tag_editor %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">서류를 올리고 태그로 찾습니다. 회의·행사·통장 등 다른 탭에 첨부한 파일도 여기서 함께 검색됩니다.</p>
+</section>
+
+<form id="filter-form" method="get" action="{{ url_for('documents.list_view') }}">
+  <input type="hidden" name="src" value="{{ src }}">
+  <div class="searchbar no-print">
+    <input type="search" name="q" value="{{ q }}" placeholder="제목·파일명·설명·태그로 검색" aria-label="검색어">
+    <button class="btn">검색</button>
+    <button type="button" class="btn" data-open-tagfilter>🏷 태그 필터{% if selected %} <span class="count">{{ selected|length }}</span>{% endif %}</button>
+    <span class="searchbar-end">
+      <button type="button" class="btn primary" data-open-add="doc-dialog">+ 서류 추가</button>
+      <a class="btn" href="{{ url_for('documents.tag_manage') }}">태그 관리</a>
+    </span>
+  </div>
+
+  <dialog id="tagfilter" class="wide tagfilter">
+    <div class="dialog-form">
+      <h3 class="dialog-title">태그 필터</h3>
+      <input type="search" id="tag-search" placeholder="태그 이름으로 검색…" autocomplete="off">
+      <div class="tf-modes">
+        <label><input type="radio" name="mode" value="all" {{ 'checked' if mode == 'all' }}> 선택한 태그가 모두 붙은 서류</label>
+        <label><input type="radio" name="mode" value="any" {{ 'checked' if mode == 'any' }}> 하나라도 붙은 서류</label>
+      </div>
+      {% if all_tags %}
+      <div class="tf-cats">
+        <button type="button" class="pill active" data-cat-tab="__all">전체 (자주 쓰는 순)</button>
+        {% for g in tag_groups %}<button type="button" class="pill" data-cat-tab="{{ g.name }}">{{ g.name }}</button>{% endfor %}
+      </div>
+      <div class="tf-panels">
+        <div class="tf-panel" data-cat-panel="__all">
+          {% for t in all_tags %}
+            <label class="tag-pick tc{{ t.color }}"><input type="checkbox" name="tag" value="{{ t.key }}" {{ 'checked' if t.key in selected }}> {{ t.name }} <small>{{ t.count }}</small></label>
+          {% endfor %}
+        </div>
+        {% for g in tag_groups %}
+        <div class="tf-panel" data-cat-panel="{{ g.name }}" hidden>
+          {% for t in g.tags %}
+            <label class="tag-pick tc{{ t.color }}"><input type="checkbox" name="tag" value="{{ t.key }}" {{ 'checked' if t.key in selected }}> {{ t.name }} <small>{{ t.count }}</small></label>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">아직 태그가 없습니다. 서류를 올릴 때 태그를 만들 수 있습니다.</p>
+      {% endif %}
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-tf-reset>초기화</button>
+        <button type="button" class="btn" data-close>닫기</button>
+        <button class="btn primary">적용</button>
+      </div>
+    </div>
+  </dialog>
+</form>
+
+<div class="kind-filter no-print" aria-label="출처">
+  <a class="pill {{ 'active' if src == 'all' }}" href="{{ link(src='all') }}">전체</a>
+  {% for key, label in src_names.items() %}
+    {% if key != 'money' or unlocked %}
+    <a class="pill {{ 'active' if src == key }}" href="{{ link(src=key) }}">{{ '🔒 ' if key == 'money' }}{{ label }} <small>{{ src_counts.get(key, 0) }}</small></a>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% if year_tags or selected %}
+<div class="chip-row no-print">
+  {% for t in year_tags[:6] %}
+    <a class="tag-chip tc{{ t.color }} {{ 'on' if t.key in selected }}" href="{{ toggle(t.key) }}">{{ t.name }}년</a>
+  {% endfor %}
+  {% for c in selected_chips %}
+    <a class="tag-chip on tc{{ c.color }}" href="{{ toggle(c.key) }}" title="필터 해제">{{ c.key }} ✕</a>
+  {% endfor %}
+  {% if selected %}<a class="muted-link" href="{{ link(tag=[]) }}">태그 모두 해제</a>{% endif %}
+</div>
+{% endif %}
+
+<p class="summary no-print">
+  {{ total }}건{% if q %} · 검색어 "{{ q }}"{% endif %}{% if selected %} · 태그 {{ selected|length }}개 ({{ '모두 포함' if mode == 'all' else '하나라도 포함' }}){% endif %}
+</p>
+
+{% if items %}
+<div class="doc-grid">
+  {% for it in items %}
+  <article class="doc-card">
+    <div class="doc-top">
+      <span class="src-chip src-{{ it.src }}">{{ src_names[it.src] }}</span>
+      {% if it.locked %}<span title="금액 자료">🔒</span>{% endif %}
+      <span class="doc-date">{{ it.date|kdatetime }}</span>
+    </div>
+    <h3><a href="{{ it.url }}">{{ it.title }}</a></h3>
+    {% if it.src != 'doc' %}<p class="doc-source">{{ it.label }}</p>{% endif %}
+    {% if it.description %}<p class="doc-desc">{{ it.description }}</p>{% endif %}
+    <div class="doc-tags">
+      {% for t in it.tags[:6] %}
+        <a class="tag-chip tc{{ t.color }} {{ 'on' if t.key in selected }}" href="{{ toggle(t.key) }}" title="{{ t.category }}">{{ t.name }}</a>
+      {% endfor %}
+      {% if it.tags|length > 6 %}<span class="muted small-note">+{{ it.tags|length - 6 }}</span>{% endif %}
+    </div>
+    <div class="doc-bottom"><a class="btn small" href="{{ it.url }}">열기</a></div>
+  </article>
+  {% endfor %}
+</div>
+{% if pages > 1 %}
+<nav class="pager no-print" aria-label="쪽">
+  {% if page_no > 1 %}<a class="btn small" href="{{ link(page=page_no - 1) }}">← 이전</a>{% endif %}
+  <span>{{ page_no }} / {{ pages }}</span>
+  {% if page_no < pages %}<a class="btn small" href="{{ link(page=page_no + 1) }}">다음 →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="empty"><p>{% if q or selected or src != 'all' %}조건에 맞는 서류가 없습니다. 검색어나 태그를 줄여 보세요.{% else %}등록된 서류가 없습니다. 오른쪽 위 [+ 서류 추가]로 첫 서류를 올리세요.{% endif %}</p></div>
+{% endif %}
+
+<dialog id="doc-dialog" class="wide" data-add-url="{{ url_for('documents.document_add') }}"
+        data-add-title="서류 추가" data-edit-title="" data-default-year="{{ default_year }}">
+  <form method="post" enctype="multipart/form-data" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <label>파일
+      <input type="file" name="file" required accept="{{ accept }}">
+    </label>
+    <label>제목 (비우면 파일 이름)
+      <input name="title" maxlength="160" autocomplete="off">
+    </label>
+    <label>설명 (선택)
+      <input name="description" maxlength="300" autocomplete="off">
+    </label>
+    <div class="field-label">태그</div>
+    <p class="hint">올해({{ default_year }}) 연도 태그가 미리 들어 있습니다. 다른 연도 서류(예: 규정집)는 ✕ 로 빼거나 연도 태그를 바꿔 주세요.</p>
+    {{ tag_editor(popular, category_hints, cat_colors) }}
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">올리기</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='tageditor.js') }}"></script>
+<script src="{{ url_for('static', filename='documents.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_files.html" import viewer_dialog %}
+{% from "_forms.html" import tag_editor %}
+{% block title %}{{ title }} · {{ app_title }}{% endblock %}
+{% block header_title %}서류 열람{% endblock %}
+
+{% block content %}
+<p class="no-print"><a class="back" href="{{ url_for('documents.list_view') }}" data-back>← 기타서류 목록</a></p>
+<h1 class="doc-title">{{ title }}</h1>
+{% if description %}<p class="doc-description">{{ description }}</p>{% endif %}
+
+<div class="doc-meta">
+  <div class="doc-tagline"><span class="meta-label">대상 태그</span>
+    {% if tags %}
+      {% for t in tags %}
+        <a class="tag-chip tc{{ t.color }}" href="{{ url_for('documents.list_view', tag=t.key) }}" title="{{ t.category }}{{ ' · 자동' if t.auto }}">{{ t.name }}</a>
+      {% endfor %}
+    {% else %}<span class="muted">없음</span>{% endif %}
+  </div>
+  <div><span class="meta-label">최종 수정일</span> {{ updated|kdatetime('full') }}
+    {% if is_document %}<span class="meta-sep">·</span><span class="meta-label">최종 검토일</span> {{ last_review|kdatetime if last_review else '검토 기록 없음' }}{% endif %}
+  </div>
+  {% if source_label %}<div><span class="meta-label">출처</span> <a href="{{ source_url }}">{{ source_label }}</a></div>{% endif %}
+</div>
+
+<div class="doc-actions no-print">
+  {% if is_document %}
+    <button type="button" class="btn" data-open-dialog="history-dialog">수정 이력 ({{ versions|length }})</button>
+    <button type="button" class="btn" data-open-dialog="review-dialog">검토 기록 ({{ reviews|length }})</button>
+  {% endif %}
+  <button type="button" class="btn" data-open-tags data-tags='{{ tag_payload|tojson }}'>🏷 태그 편집</button>
+  {% if is_document %}
+    <button type="button" class="btn" data-open-dialog="edit-dialog">제목·설명 수정</button>
+    <button type="button" class="btn" data-open-dialog="version-dialog">새 버전 올리기</button>
+  {% endif %}
+  {% if current %}
+    <button type="button" class="btn" data-print>인쇄</button>
+    <a class="btn" href="{{ url_for('files.download', file_id=current.id) }}">원본 내려받기</a>
+  {% endif %}
+  {% if is_document %}
+  <form method="post" action="{{ url_for('documents.document_delete', doc_id=doc.id) }}"
+        data-confirm="'{{ title }}' 서류를 삭제할까요? 이전 버전 파일도 함께 삭제됩니다.">
+    <button class="btn danger">삭제</button>
+  </form>
+  {% endif %}
+  <a class="btn" href="{{ url_for('documents.list_view') }}" data-back>닫기</a>
+</div>
+
+{% if current %}
+<div id="preview" class="preview"
+     data-kind="{{ current.file_type }}" data-url="{{ url_for('files.view', file_id=current.id) }}"
+     data-name="{{ current.original_name }}"
+     data-jszip="{{ url_for('static', filename='vendor/jszip.min.js') }}"
+     data-docx="{{ url_for('static', filename='vendor/docx-preview.min.js') }}"></div>
+{% else %}
+<div class="empty"><p>이 서류에 연결된 파일이 없습니다.</p></div>
+{% endif %}
+
+{% if is_document %}
+<dialog id="history-dialog" class="wide">
+  <div class="dialog-form">
+    <h3 class="dialog-title">수정 이력</h3>
+    <p class="hint">새 파일로 교체해도 이전 버전은 이곳에 보관됩니다.</p>
+    <table class="mini-table history-table">
+      {% for v in versions|reverse %}
+      <tr>
+        <td class="nowrap">v{{ versions|length - loop.index0 }}{% if loop.first %} <span class="src-chip src-doc">현재</span>{% endif %}</td>
+        <td><button type="button" class="chip-name" data-view data-group="doc-versions"
+                    data-url="{{ url_for('files.view', file_id=v.id) }}" data-download="{{ url_for('files.download', file_id=v.id) }}"
+                    data-kind="{{ v.file_type }}" data-name="{{ v.original_name }}">{{ v.original_name }}</button>
+            {% if v.note %}<div class="muted small-note">{{ v.note }}</div>{% endif %}</td>
+        <td class="nowrap muted">{{ v.uploaded_at|kdatetime('full') }}</td>
+        <td><a class="btn small" href="{{ url_for('files.download', file_id=v.id) }}">내려받기</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="dialog-actions"><button type="button" class="btn" data-close>닫기</button></div>
+  </div>
+</dialog>
+
+<dialog id="review-dialog" class="wide">
+  <div class="dialog-form">
+    <h3 class="dialog-title">검토 기록</h3>
+    {% if reviews %}
+    <table class="mini-table">
+      {% for r in reviews %}
+      <tr>
+        <td class="nowrap">{{ r.reviewed_at|kdatetime }}</td>
+        <td class="nowrap">{{ r.reviewer or '' }}</td>
+        <td>{{ r.comment or '' }}</td>
+        <td><form method="post" action="{{ url_for('documents.review_delete', review_id=r.id) }}" data-confirm="이 검토 기록을 삭제할까요?">
+              <button class="btn small danger">삭제</button></form></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">아직 검토 기록이 없습니다.</p>{% endif %}
+  </div>
+  <form method="post" action="{{ url_for('documents.review_add', doc_id=doc.id) }}" class="dialog-form review-form">
+    <h4 class="field-label">검토 기록 남기기</h4>
+    <div class="row2">
+      <label>검토일 <input type="date" name="reviewed_at" value="{{ today }}" required></label>
+      <label>검토자 <input name="reviewer" maxlength="40" autocomplete="off"></label>
+    </div>
+    <label>의견 <input name="comment" maxlength="300" autocomplete="off"></label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>닫기</button>
+      <button class="btn primary">기록 남기기</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="edit-dialog" class="wide">
+  <form method="post" action="{{ url_for('documents.document_edit', doc_id=doc.id) }}" class="dialog-form">
+    <h3 class="dialog-title">제목·설명 수정</h3>
+    <label>제목 <input name="title" value="{{ title }}" required maxlength="160" autocomplete="off"></label>
+    <label>설명 <input name="description" value="{{ description }}" maxlength="300" autocomplete="off"></label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="version-dialog" class="wide">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('documents.document_version', doc_id=doc.id) }}" class="dialog-form">
+    <h3 class="dialog-title">새 버전 올리기</h3>
+    <p class="hint">올린 파일이 현재 버전이 되고, 이전 버전은 [수정 이력]에 보관됩니다.</p>
+    <label>파일 <input type="file" name="file" required accept="{{ accept }}"></label>
+    <label>변경 메모 (선택) <input name="note" maxlength="200" autocomplete="off" placeholder="예: 2026년 개정"></label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">올리기</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+<dialog id="tags-dialog" class="wide">
+  <form method="post" class="dialog-form"
+        action="{{ url_for('documents.document_tags', doc_id=doc.id) if is_document else url_for('documents.file_tags', file_id=file_id) }}">
+    <h3 class="dialog-title">태그 편집</h3>
+    {% if not is_document %}<p class="hint">자동 태그(출처에서 붙는 태그)는 여기서 바꿀 수 없습니다. 직접 단 태그만 편집됩니다.</p>{% endif %}
+    {{ tag_editor(popular, category_hints, cat_colors) }}
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+{{ viewer_dialog() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='tageditor.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+<script src="{{ url_for('static', filename='docview.js') }}"></script>
+{% endblock %}

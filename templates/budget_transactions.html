@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% from "_budget_nav.html" import budget_nav %}
+{% block title %}거래내역 · {{ app_title }}{% endblock %}
+{% block header_title %}예산·결산 현황{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>예산·결산 현황</h1>
+</section>
+{{ budget_nav('transactions') }}
+
+<div class="toolbar no-print">
+  <form method="get" class="filters" id="filter-form">
+    <select name="account" aria-label="통장">
+      <option value="all">전체 통장</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if account == a.id|string }}>{{ a.alias }}</option>{% endfor %}
+    </select>
+    <select name="year" aria-label="연도">
+      <option value="all" {{ 'selected' if year == 'all' }}>전체 연도</option>
+      {% for y in years %}<option value="{{ y }}" {{ 'selected' if year == y|string }}>{{ y }}년</option>{% endfor %}
+      {% if year != 'all' and year|int not in years %}<option value="{{ year }}" selected>{{ year }}년</option>{% endif %}
+    </select>
+    <label class="range-in" title="기간을 정하면 연도 선택보다 우선합니다">기간
+      <input type="date" name="start" value="{{ start }}" aria-label="시작일"> ~ <input type="date" name="end" value="{{ end }}" aria-label="종료일"></label>
+    <select name="status" aria-label="상태">
+      <option value="all" {{ 'selected' if status == 'all' }}>전체 상태</option>
+      <option value="unclassified" {{ 'selected' if status == 'unclassified' }}>미분류만</option>
+      <option value="auto" {{ 'selected' if status == 'auto' }}>자동 분류된 것</option>
+      <option value="moved" {{ 'selected' if status == 'moved' }}>회계를 옮긴 것</option>
+      <option value="transfer" {{ 'selected' if status == 'transfer' }}>이체로 표시한 것</option>
+    </select>
+    <input type="search" name="q" value="{{ q }}" placeholder="내용·상대방 검색" aria-label="검색어">
+    <button class="btn">조회</button>
+  </form>
+  <div class="actions">
+    <button type="button" class="btn primary" data-open-add="import-dialog">📥 은행 엑셀 올리기</button>
+    <a class="btn" href="{{ url_for('budget.transfers') }}">이체 후보 찾기</a>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if not accounts %}
+<div class="empty"><p>먼저 <a class="inline-link" href="{{ url_for('finance.accounts') }}">예금통장·카드 현황</a>에서 경상비·보수교육비 통장을 등록해 주세요. 엑셀을 올릴 때 통장을 자동으로 찾는 데 쓰입니다.</p></div>
+{% else %}
+<p class="presets no-print">기간 빠른 선택:
+  {% for label, a, b in presets %}<a class="pill" href="{{ link(start=a.isoformat(), end=b.isoformat(), year=None) }}">{{ label }}</a>{% endfor %}
+  {% if start or end %}<a class="pill" href="{{ link(start=None, end=None, year=None) }}">기간 해제 ✕</a>{% endif %}</p>
+{% if start or end %}<p class="range-note">조회 기간: <strong>{{ start or '처음' }} ~ {{ end or '현재' }}</strong></p>{% endif %}
+<div class="sum-card compact">
+  <div><div class="sum-label">입금 합계</div><div class="sum-amount plus">{{ deposit_sum|won }}</div></div>
+  <div><div class="sum-label">출금 합계</div><div class="sum-amount minus">{{ withdrawal_sum|won }}</div></div>
+  <div><div class="sum-label">거래</div><div class="sum-amount small">{{ total_count }}건</div></div>
+  <div class="sum-note">통장 간 이체로 표시한 거래는 합계에서 빠집니다.<br>
+    {% if unclassified %}<a class="warn-link" href="{{ link(status='unclassified') }}">⚠ 예산과목이 없는 거래 {{ unclassified }}건</a>{% else %}✓ 모두 분류되었습니다{% endif %}</div>
+</div>
+
+{% if rows %}
+<form method="post" action="{{ url_for('budget.bulk') }}" id="tx-form">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <div class="table-wrap">
+    <table class="table tx-table">
+      <thead><tr>
+        <th class="no-print check-col"><input type="checkbox" id="check-all" aria-label="모두 선택"></th>
+        <th>일시</th><th>내용 · 상대방</th><th class="num">입금</th><th class="num">출금</th><th class="num">잔액</th>
+        <th>회계</th><th>예산과목</th>
+      </tr></thead>
+      <tbody>
+      {% for t in rows %}
+        <tr class="{{ 'is-transfer' if t.is_transfer }}">
+          <td class="no-print check-col"><input type="checkbox" name="ids" value="{{ t.id }}" aria-label="선택"></td>
+          <td class="nowrap">{{ t.occurred_at|ktx }}</td>
+          <td class="tx-main">
+            <strong>{{ t.memo_own or t.summary or '' }}</strong>
+            {% if t.voucher_id %}<a class="badge voucher" href="{{ url_for('vouchers.detail', voucher_id=t.voucher_id) }}" title="지출결의서 열기">🧾 {{ t.voucher_no }}</a>{% endif %}
+            <span class="tx-sub">{{ t.counterparty or '' }}{% if t.summary and t.memo_own %} · {{ t.summary }}{% endif %}</span>
+          </td>
+          <td class="num plus">{{ t.deposit|won if t.deposit }}</td>
+          <td class="num minus">{{ t.withdrawal|won if t.withdrawal }}</td>
+          <td class="num muted">{{ t.balance|won if t.balance is not none }}</td>
+          <td class="nowrap">{{ t.fund_alias or t.account_alias }}{% if t.fund_account_id and t.fund_account_id != t.account_id %} <span class="badge moved" title="{{ t.account_alias }} 통장에서 {{ t.fund_alias }} 회계로 옮김">🔀</span>{% endif %}</td>
+          <td class="cat-col">
+            {% if t.is_transfer %}<span class="badge transfer">통장 간 이체</span>
+            {% else %}
+            <button type="button" class="cat-edit no-print-btn" data-open-edit="tx-cat-dialog" data-id="{{ t.id }}"
+                    data-category-id="{{ t.category_id or '' }}" data-desc="{{ t.memo_own or t.summary or t.counterparty or '' }}"
+                    title="눌러서 예산과목 {{ '변경' if t.category_id else '지정' }}">
+              {% if t.category_id %}<span class="cat-path">{{ paths.get(t.category_id, '') }}</span>{% if t.category_source == 'rule' %} <span class="badge auto" title="규칙으로 자동 분류됨">자동</span>{% endif %}
+              {% else %}<span class="badge unclassified">미분류</span>{% endif %}
+              <span class="pen" aria-hidden="true">✎</span>
+            </button>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bulk-bar no-print" id="bulk-bar" hidden>
+    <strong><span id="selected-count">0</span>건 선택</strong>
+    <select name="category_id" aria-label="예산과목">
+      <option value="">예산과목 선택…</option>
+      {% for kind in ('지출', '수입') %}
+      <optgroup label="{{ kind }}">
+        {% for c in categories if c.kind == kind %}<option value="{{ c.id }}">{{ '　' * c.depth }}{{ c.name }}{{ ' ›' if c.has_children }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+    <label class="check-inline"><input type="checkbox" name="remember" value="1"> 같은 내용은 자동 분류</label>
+    <button class="btn primary" name="action" value="category">분류 지정</button>
+    <span class="bulk-sep"></span>
+    {% for a in accounts %}<button class="btn" name="action" value="fund:{{ a.id }}" title="소속 회계를 {{ a.alias }}(으)로 옮깁니다">{{ a.alias }}로 옮기기</button>{% endfor %}
+    <button class="btn" name="action" value="voucher" formaction="{{ url_for('vouchers.create') }}" title="선택한 출금 거래를 지출결의서 한 장으로 묶습니다">🧾 지출결의로 묶기</button>
+    <button class="btn" name="action" value="transfer_on">이체로 표시</button>
+    <button class="btn" name="action" value="transfer_off">이체 해제</button>
+    <button class="btn" name="action" value="clear_category">분류 해제</button>
+  </div>
+</form>
+
+{% if pages > 1 %}
+<nav class="pager no-print" aria-label="쪽">
+  {% if page_no > 1 %}<a class="btn small" href="{{ link(page=page_no - 1) }}">← 이전</a>{% endif %}
+  <span>{{ page_no }} / {{ pages }}</span>
+  {% if page_no < pages %}<a class="btn small" href="{{ link(page=page_no + 1) }}">다음 →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="empty"><p>{% if total_count == 0 and not q and status == 'all' %}가져온 거래가 없습니다. 오른쪽 위 [은행 엑셀 올리기]로 국민은행 거래내역서를 올려 보세요.{% else %}조건에 맞는 거래가 없습니다.{% endif %}</p></div>
+{% endif %}
+{% endif %}
+
+<dialog id="tx-cat-dialog" data-edit-url="{{ url_for('budget.tx_category', tx_id=0) }}" data-edit-title="예산과목 지정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <p class="pick-desc">거래: <strong class="pick-what"></strong></p>
+    <label>예산과목
+      <select name="category_id">
+        <option value="">(분류 안 함)</option>
+        {% for kind in ('지출', '수입') %}
+        <optgroup label="{{ kind }}">
+          {% for c in categories if c.kind == kind %}<option value="{{ c.id }}">{{ '　' * c.depth }}{{ c.name }}{{ ' ›' if c.has_children }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="remember" value="1"> 같은 내용은 자동 분류</label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="import-dialog" class="wide" data-add-url="{{ url_for('budget.import_upload') }}" data-add-title="은행 엑셀 올리기">
+  <form method="post" enctype="multipart/form-data" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <p class="hint">국민은행 인터넷뱅킹에서 내려받은 <strong>거래내역 엑셀(.xls / .xlsx)</strong>을 선택하세요. 올리면 저장하기 전에 확인 화면이 먼저 나옵니다.</p>
+    <label>엑셀 파일 <input type="file" name="file" accept=".xls,.xlsx" required></label>
+    <p class="hint">원본 파일과 파일 이름(계좌번호가 들어 있음)은 저장하지 않고, 거래 내용만 가져옵니다.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">올리기</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='budget.js') }}"></script>
+{% endblock %}

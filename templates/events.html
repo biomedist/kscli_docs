@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_files.html" import file_cell, viewer_dialog %}
+{% from "_forms.html" import event_dialog %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+
+{% block content %}
+{% set next_url = request.full_path.rstrip('?') %}
+{% set scope = '전체' if show_all else selected ~ '년' %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">{{ page.desc }}</p>
+  <h2 class="print-only">{{ scope }}{{ ' · ' ~ kind if kind }}</h2>
+</section>
+
+<div class="toolbar no-print">
+  <nav class="tabs" aria-label="연도">
+    {% for y in years %}
+      <a class="tab {{ 'active' if (not show_all and selected == y|string) }}"
+         href="{{ url_for('events.list_view', year=y, kind=kind) }}">{{ y }}</a>
+    {% endfor %}
+    <a class="tab {{ 'active' if show_all }}" href="{{ url_for('events.list_view', year='all', kind=kind) }}">전체</a>
+  </nav>
+  <div class="actions">
+    <button type="button" class="btn primary" data-open-add="event-dialog">+ 행사 추가</button>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+<div class="kind-filter no-print" aria-label="구분">
+  <a class="pill {{ 'active' if not kind }}" href="{{ url_for('events.list_view', year=selected) }}">전체</a>
+  {% for k in kinds %}
+    <a class="pill {{ 'active' if kind == k }}" href="{{ url_for('events.list_view', year=selected, kind=k) }}">{{ k }}</a>
+  {% endfor %}
+</div>
+
+{% if events %}
+<div class="table-wrap">
+  <table class="table events-table">
+    <thead><tr>
+      <th>구분</th><th>행사명</th><th>일자</th><th>시간</th><th>개최장소</th>
+      <th class="num">참석수</th><th>관련문서</th><th class="no-print program-col">프로그램</th>
+      <th class="no-print actions-col">편집</th>
+    </tr></thead>
+    <tbody>
+    {% for e in events %}
+      {% set detail_url = url_for('events.detail', event_id=e.id) %}
+      <tr class="event-row" data-href="{{ detail_url }}">
+        <td><span class="kind-badge kind-{{ e.kind }}">{{ e.kind }}</span></td>
+        <td class="title-col"><a href="{{ detail_url }}">{{ e.name or (e.kind ~ ' 프로그램') }}</a></td>
+        <td class="nowrap">{{ e.held_on|kdate }}</td>
+        <td class="nowrap">{{ e|krange }}</td>
+        <td>{{ e.place or '' }}</td>
+        <td class="num">{{ e.attendees if e.attendees is not none else '' }}</td>
+        <td class="file-col">
+          {{ file_cell('event_doc-' ~ e.id, files.get(('event_doc', e.id), []),
+                       url_for('events.upload', event_id=e.id), {'year': selected, 'kind': kind or ''}, accept, next_url) }}
+        </td>
+        <td class="no-print program-col"><a class="btn small" href="{{ detail_url }}">프로그램 {{ e.program_count }}개 보기</a></td>
+        <td class="no-print actions-col">
+          <button type="button" class="btn small" data-open-edit="event-dialog"
+                  data-id="{{ e.id }}" data-kind="{{ e.kind }}" data-name="{{ e.name or '' }}"
+                  data-held-on="{{ e.held_on or '' }}" data-start-time="{{ e.start_time or '' }}"
+                  data-end-time="{{ e.end_time or '' }}" data-place="{{ e.place or '' }}"
+                  data-attendees="{{ e.attendees if e.attendees is not none else '' }}">수정</button>
+          <form method="post" action="{{ url_for('events.delete', event_id=e.id) }}"
+                data-confirm="'{{ e.name or e.kind }}' 행사를 삭제할까요? 프로그램 {{ e.program_count }}개와 첨부파일도 함께 삭제됩니다.">
+            <input type="hidden" name="year" value="{{ selected }}">
+            <input type="hidden" name="kind" value="{{ kind or '' }}">
+            <button class="btn small danger">삭제</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="summary">
+  {{ scope }}{{ ' · ' ~ kind if kind }}
+  {% if summary %}— {% for k, n in summary %}{{ k }} {{ n }}회{{ ', ' if not loop.last }}{% endfor %}{% endif %}
+  <span class="no-print">· 행사 줄을 누르면 시간별 프로그램표가 열립니다.</span>
+</p>
+{% else %}
+<div class="empty"><p>{{ scope }}{{ ' ' ~ kind if kind }}에 등록된 행사가 없습니다. 오른쪽 위 [+ 행사 추가]로 첫 행사를 등록하세요.</p></div>
+{% endif %}
+
+{{ event_dialog(kinds, '', kind or '') }}
+{{ viewer_dialog() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='attach.js') }}"></script>
+<script src="{{ url_for('static', filename='timeselect.js') }}"></script>
+<script src="{{ url_for('static', filename='events.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+{% endblock %}

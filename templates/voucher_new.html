@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_budget_nav.html" import budget_nav %}
+{% block title %}결의서 만들기 · {{ app_title }}{% endblock %}
+{% block header_title %}예산·결산 현황{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('vouchers.list_view') }}">← 지출결의 목록</a>
+  <h1>결의서 만들기</h1>
+  <p>한 결의서로 묶을 출금 거래를 고르세요. 입금·통장 간 이체·이미 묶인 거래는 나오지 않습니다.</p>
+</section>
+{{ budget_nav('vouchers') }}
+
+<form method="get" class="filters toolbar" id="new-filter">
+  <select name="year" aria-label="연도" onchange="this.form.submit()">
+    <option value="all" {{ 'selected' if year == 'all' }}>전체 연도</option>
+    {% for y in years %}<option value="{{ y }}" {{ 'selected' if year == y }}>{{ y }}년</option>{% endfor %}
+  </select>
+  <input type="search" name="q" value="{{ q }}" placeholder="내용·상대방 검색" aria-label="검색어">
+  <button class="btn">조회</button>
+</form>
+
+{% if rows %}
+<form method="post" action="{{ url_for('vouchers.create') }}" id="pick-form">
+  <input type="hidden" name="next" value="{{ url_for('vouchers.new', year=year, q=q) }}">
+  <div class="table-wrap">
+    <table class="table tx-table">
+      <thead><tr>
+        <th class="check-col"><input type="checkbox" id="pick-all" aria-label="모두 선택"></th>
+        <th>일시</th><th>내용 · 상대방</th><th class="num">출금</th><th>예산과목</th>
+      </tr></thead>
+      <tbody>
+      {% for t in rows %}
+        <tr>
+          <td class="check-col"><input type="checkbox" name="ids" value="{{ t.id }}" data-amount="{{ t.withdrawal }}" aria-label="선택"></td>
+          <td class="nowrap">{{ t.occurred_at|ktx }}</td>
+          <td class="tx-main"><strong>{{ t.memo_own or t.summary or '' }}</strong>
+            <span class="tx-sub">{{ t.counterparty or '' }}{% if t.summary and t.memo_own %} · {{ t.summary }}{% endif %}</span></td>
+          <td class="num minus">{{ t.withdrawal|won }}</td>
+          <td class="cat-path">{{ paths.get(t.category_id, '') if t.category_id else '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="bulk-bar" id="pick-bar">
+    <strong><span id="pick-count">0</span>건 · <span id="pick-sum">0원</span></strong>
+    <button class="btn primary" id="pick-go" disabled>🧾 선택한 거래로 결의서 만들기</button>
+  </div>
+</form>
+{% if rows|length >= 300 %}<p class="hint">최근 300건만 보여 드립니다. 연도나 검색어로 줄여 주세요.</p>{% endif %}
+{% else %}
+<div class="empty"><p>묶을 수 있는 출금 거래가 없습니다. 모두 결의서로 묶었거나, 조건에 맞는 거래가 없습니다.</p></div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vouchers.js') }}"></script>
+{% endblock %}

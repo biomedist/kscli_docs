@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+
+{% from "_files.html" import file_cell, viewer_dialog %}
+{% from "_forms.html" import time_select %}
+
+{% block content %}
+{% set next_url = request.full_path.rstrip('?') %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">{{ page.desc }}</p>
+  <h2 class="print-only">{{ '전체' if show_all else selected ~ '년' }}</h2>
+</section>
+
+<div class="toolbar no-print">
+  <nav class="tabs" aria-label="연도">
+    {% for y in years %}
+      <a class="tab {{ 'active' if (not show_all and selected == y|string) }}"
+         href="{{ url_for('meetings.list_view', year=y) }}">{{ y }}</a>
+    {% endfor %}
+    <a class="tab {{ 'active' if show_all }}" href="{{ url_for('meetings.list_view', year='all') }}">전체</a>
+  </nav>
+  <div class="actions">
+    <button type="button" class="btn primary" data-open-add="meeting-dialog">+ 회의 추가</button>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if meetings %}
+<div class="table-wrap">
+  <table class="table meetings-table">
+    <thead><tr>
+      <th>개최일시</th><th>개최장소</th><th>회의명</th>
+      <th class="num">총인원</th><th class="num">참석수</th>
+      <th>주요의결안건</th><th>회의록</th><th>참석서명지</th>
+      <th class="no-print actions-col">편집</th>
+    </tr></thead>
+    <tbody>
+    {% for m in meetings %}
+      <tr>
+        <td class="nowrap">{{ m.held_at|kdt }}</td>
+        <td>{{ m.place or '' }}</td>
+        <td class="title-col">{{ m.title }}</td>
+        <td class="num">{{ m.total_members if m.total_members is not none else '' }}</td>
+        <td class="num">{{ m.attendees if m.attendees is not none else '' }}</td>
+        <td class="agenda-col">{{ m.agenda or '' }}</td>
+        <td class="file-col">{{ file_cell('meeting_minutes-' ~ m.id, files.get(('meeting_minutes', m.id), []), url_for('meetings.upload', meeting_id=m.id), {'slot': 'minutes', 'year': selected}, accept, next_url) }}</td>
+        <td class="file-col">{{ file_cell('meeting_signature-' ~ m.id, files.get(('meeting_signature', m.id), []), url_for('meetings.upload', meeting_id=m.id), {'slot': 'signature', 'year': selected}, accept, next_url) }}</td>
+        <td class="no-print actions-col">
+          <button type="button" class="btn small" data-open-edit="meeting-dialog"
+                  data-id="{{ m.id }}" data-held-at="{{ m.held_at or '' }}" data-place="{{ m.place or '' }}"
+                  data-title="{{ m.title }}" data-total-members="{{ m.total_members if m.total_members is not none else '' }}"
+                  data-attendees="{{ m.attendees if m.attendees is not none else '' }}"
+                  data-agenda="{{ m.agenda or '' }}">수정</button>
+          <form method="post" action="{{ url_for('meetings.delete', meeting_id=m.id) }}"
+                data-confirm="'{{ m.title }}' 회의를 삭제할까요? 첨부파일도 함께 삭제됩니다.">
+            <input type="hidden" name="year" value="{{ selected }}">
+            <button class="btn small danger">삭제</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="summary">{{ '전체' if show_all else selected ~ '년' }} 회의 {{ meetings|length }}회</p>
+{% else %}
+<div class="empty"><p>{{ '등록된' if show_all else selected ~ '년에 등록된' }} 회의가 없습니다. 오른쪽 위 [+ 회의 추가]로 첫 회의를 등록하세요.</p></div>
+{% endif %}
+
+<dialog id="meeting-dialog" class="wide" data-add-url="{{ url_for('meetings.add') }}"
+        data-edit-url="{{ url_for('meetings.edit', meeting_id=0) }}"
+        data-add-title="회의 추가" data-edit-title="회의 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <input type="hidden" name="attendance_dirty" value="0">
+    <label>개최일시
+      <span class="datetime">
+        <input type="date" name="held_date" required>
+        {{ time_select('held', 10, true) }}
+      </span>
+    </label>
+    <label>개최장소
+      <input name="place" maxlength="80" autocomplete="off">
+    </label>
+    <label>회의명
+      <input name="title" required maxlength="120" autocomplete="off">
+    </label>
+    <label>주요의결안건
+      <textarea name="agenda" rows="4"></textarea>
+    </label>
+
+    <fieldset class="attendance">
+      <legend>임원 출석 체크</legend>
+      {% if exec_officers %}
+        <div class="att-tools">
+          <button type="button" class="btn small" data-att-all>전체 출석</button>
+          <button type="button" class="btn small" data-att-none>전체 해제</button>
+        </div>
+        <div class="att-grid">
+          {% for o in exec_officers %}
+            <label class="check"><input type="checkbox" name="exec_present" value="{{ o.id }}">
+              <span>{{ o.position }} {{ o.name }}</span></label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="hint">임원 명부에 임원을 먼저 등록하면 출석을 체크할 수 있습니다. 그전에는 아래 숫자를 직접 입력하세요.</p>
+      {% endif %}
+      {% if council_officers %}
+        <details class="council">
+          <summary>평의원 참석 (선택)</summary>
+          <div class="att-grid">
+            {% for o in council_officers %}
+              <label class="check"><input type="checkbox" name="council_present" value="{{ o.id }}">
+                <span>{{ o.name }}</span></label>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
+    </fieldset>
+
+    <div class="row2">
+      <label>총인원
+        <input type="number" name="total_members" min="0" max="9999">
+      </label>
+      <label>참석수
+        <input type="number" name="attendees" min="0" max="9999">
+      </label>
+    </div>
+    <p class="hint">출석을 체크하면 총인원과 참석수가 자동으로 채워지고, 직접 고칠 수도 있습니다. 출석을 체크하지 않은 회의는 "임원 회의 참석 현황"에 집계되지 않습니다.</p>
+
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+{{ viewer_dialog() }}
+
+<script type="application/json" id="meeting-data">{{ attendance|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='attach.js') }}"></script>
+<script src="{{ url_for('static', filename='timeselect.js') }}"></script>
+<script src="{{ url_for('static', filename='meetings.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+{% endblock %}

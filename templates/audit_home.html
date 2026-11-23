@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}행정지도감사 · {{ app_title }}{% endblock %}
+{% block header_title %}행정지도감사{% endblock %}
+{% block content %}
+<section class="intro">
+  <a class="back" href="{{ url_for('home') }}">← 목록 선택</a>
+  <h1>행정지도감사</h1>
+  <p>관리할 항목을 선택하세요.</p>
+</section>
+<div class="cards">
+  {% for m in menu %}
+  <a class="card" style="--accent:{{ m.color }}" href="{{ url_for(m.endpoint) }}"
+     {% if m.locked and not unlocked %}data-locked{% endif %}>
+    {% if m.locked %}<span class="lock-badge" title="{{ '잠금 해제됨' if unlocked else '비밀번호가 필요합니다' }}">{{ '🔓' if unlocked else '🔒' }}</span>{% endif %}
+    <span class="card-icon">{{ m.icon }}</span>
+    <h2>{{ m.title }}</h2>
+    <p>{{ m.desc }}</p>
+    <span class="card-go">열기 →</span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if password_set and not unlocked %}
+<dialog id="unlock-dialog">
+  <form method="post" action="{{ url_for('auth.unlock') }}" class="dialog-form">
+    <h3 class="dialog-title">🔒 비밀번호 입력</h3>
+    <p class="hint">금액이 포함된 자료입니다. 비밀번호를 입력해 주세요.</p>
+    <input type="hidden" name="next" value="">
+    <label>비밀번호
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">확인</button>
+    </div>
+  </form>
+</dialog>
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='lock.js') }}"></script>
+{% endif %}
+{% endblock %}

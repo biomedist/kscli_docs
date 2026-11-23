@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_files.html" import file_cell, viewer_dialog %}
+{% block title %}찬조금 내역 · {{ app_title }}{% endblock %}
+{% block header_title %}찬조금 내역{% endblock %}
+
+{% block content %}
+{% set next_url = request.full_path.rstrip('?') %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('donations.list_view', year=year) }}">← 찬조금 내역 ({{ year }}년)</a>
+  {% if scope == 'event' %}
+    <h1><span class="kind-badge kind-{{ event.kind }}">{{ event.kind }}</span> {{ event.name or (event.kind ~ ' 프로그램') }}</h1>
+    <p>{{ event.held_on|kdate }}{{ ' · ' ~ event.place if event.place }}
+       <a class="no-print inline-link" href="{{ url_for('events.detail', event_id=event.id) }}">행사 프로그램 보기</a></p>
+  {% else %}
+    <h1>행사와 무관한 찬조 <small class="muted">({{ year }}년)</small></h1>
+  {% endif %}
+</section>
+
+<div class="toolbar no-print">
+  <p class="hint">{{ rows|length }}건 · 합계 <strong>{{ total|won }}</strong></p>
+  <div class="actions">
+    <button type="button" class="btn primary" data-open-add="donation-dialog">+ 찬조금 추가</button>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if rows %}
+<div class="table-wrap">
+  <table class="table don-table">
+    <thead><tr>
+      <th>일자</th><th>구분</th><th>찬조자(회사)</th><th class="num">찬조금액</th><th>사용내역</th><th>비고</th><th>증빙</th>
+      <th class="no-print actions-col">편집</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="nowrap">{{ r.donated_on|kdate }}</td>
+        <td class="nowrap">{{ r.kind }}</td>
+        <td class="title-col">{{ r.donor }}</td>
+        <td class="num amount">{{ r.amount|won }}</td>
+        <td class="agenda-col">{{ r.usage or '' }}</td>
+        <td class="agenda-col">{{ r.note or '' }}</td>
+        <td class="file-col">
+          {{ file_cell('donation_doc-' ~ r.id, files.get(('donation_doc', r.id), []),
+                       url_for('donations.upload', donation_id=r.id), {}, accept, next_url) }}
+        </td>
+        <td class="no-print actions-col">
+          <button type="button" class="btn small" data-open-edit="donation-dialog"
+                  data-id="{{ r.id }}" data-donated-on="{{ r.donated_on or '' }}" data-kind="{{ r.kind }}"
+                  data-donor="{{ r.donor or '' }}" data-amount="{{ r.amount if r.amount is not none else '' }}"
+                  data-usage="{{ r.usage or '' }}" data-note="{{ r.note or '' }}">수정</button>
+          <button type="button" class="btn small" data-copy-donation title="같은 일자·구분·사용내역으로 다음 찬조금을 추가합니다"
+                  data-donated-on="{{ r.donated_on or '' }}" data-kind="{{ r.kind }}"
+                  data-usage="{{ r.usage or '' }}" data-note="{{ r.note or '' }}">복사</button>
+          <form method="post" action="{{ url_for('donations.delete', donation_id=r.id) }}"
+                data-confirm="'{{ r.donor }}' 찬조금을 삭제할까요? 증빙 파일도 함께 삭제됩니다.">
+            <button class="btn small danger">삭제</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="3">합계</td><td class="num amount">{{ total|won }}</td><td colspan="4"></td></tr></tfoot>
+  </table>
+</div>
+{% else %}
+<div class="empty"><p>등록된 찬조금이 없습니다. 오른쪽 위 [+ 찬조금 추가]로 입력하세요.</p></div>
+{% endif %}
+
+<dialog id="donation-dialog" class="wide" data-add-url="{{ url_for('donations.add') }}"
+        data-edit-url="{{ url_for('donations.edit', donation_id=0) }}"
+        data-add-title="찬조금 추가" data-edit-title="찬조금 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <input type="hidden" name="event_id" value="{{ add_event_id }}">
+    <div class="row2">
+      <label>일자 <input type="date" name="donated_on" required></label>
+      <label>구분
+        <select name="kind" required>{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <label>찬조자명 (회사) <input name="donor" required maxlength="80" autocomplete="off"></label>
+    <label>찬조금액 (원) <input name="amount" type="text" inputmode="numeric" required autocomplete="off" placeholder="1,000,000"></label>
+    <label>사용내역 <input name="usage" maxlength="160" autocomplete="off"></label>
+    <label>비고 (용도 등) <input name="note" maxlength="160" autocomplete="off"></label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+{{ viewer_dialog() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='attach.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+<script src="{{ url_for('static', filename='donations.js') }}"></script>
+{% endblock %}

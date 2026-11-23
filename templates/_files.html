@@ -1,0 +1,42 @@
+{# 첨부파일 칸과 보기 창 공통 부품. 회의실적·행사실적 등 여러 화면에서 같이 씁니다. #}
+{% set kind_icon = {'pdf': '📄', 'image': '🖼️', 'docx': '📝', 'doc': '📝', 'hwp': '📃'} %}
+
+{% macro file_cell(group, file_list, upload_url, hidden, accept, next_url) %}
+  <div class="file-list">
+    {% for f in file_list %}
+      <span class="chip">
+        <button type="button" class="chip-name" data-view data-group="{{ group }}"
+                data-url="{{ url_for('files.view', file_id=f.id) }}"
+                data-download="{{ url_for('files.download', file_id=f.id) }}"
+                data-kind="{{ f.file_type }}" data-name="{{ f.original_name }}"
+                title="{{ f.original_name }}">{{ kind_icon.get(f.file_type, '📎') }} {{ f.original_name }}</button>
+        <form class="no-print" method="post" action="{{ url_for('files.delete', file_id=f.id) }}"
+              data-confirm="'{{ f.original_name }}' 파일을 삭제할까요?">
+          <input type="hidden" name="next" value="{{ next_url }}">
+          <button class="chip-x" aria-label="{{ f.original_name }} 삭제" title="삭제">✕</button>
+        </form>
+      </span>
+    {% endfor %}
+    <form class="attach-form no-print" method="post" enctype="multipart/form-data" action="{{ upload_url }}">
+      {% for k, v in hidden.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <input type="file" name="files" multiple hidden accept="{{ accept }}">
+      <button type="button" class="btn small" data-pick>+ 첨부</button>
+    </form>
+  </div>
+{% endmacro %}
+
+{% macro viewer_dialog() %}
+<dialog id="viewer" class="viewer"
+        data-jszip="{{ url_for('static', filename='vendor/jszip.min.js') }}"
+        data-docx="{{ url_for('static', filename='vendor/docx-preview.min.js') }}">
+  <div class="viewer-head">
+    <button type="button" class="btn small" data-prev aria-label="이전 파일">◀</button>
+    <span class="viewer-pos"></span>
+    <button type="button" class="btn small" data-next aria-label="다음 파일">▶</button>
+    <strong class="viewer-name"></strong>
+    <a class="btn small" data-dl>다운로드</a>
+    <button type="button" class="btn small" data-close>닫기</button>
+  </div>
+  <div class="viewer-body"></div>
+</dialog>
+{% endmacro %}

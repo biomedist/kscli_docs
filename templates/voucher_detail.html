@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% from "_budget_nav.html" import budget_nav %}
+{% from "_files.html" import file_cell, viewer_dialog %}
+{% block title %}지출결의서 {{ v.voucher_no }} · {{ app_title }}{% endblock %}
+{% block header_title %}예산·결산 현황{% endblock %}
+
+{% block content %}
+{% set next_url = request.full_path.rstrip('?') %}
+<section class="intro no-print">
+  <a class="back" href="{{ url_for('vouchers.list_view', year=(v.paid_on or '')[:4]) }}">← 지출결의 목록</a>
+  <h1>예산·결산 현황</h1>
+</section>
+<div class="no-print">{{ budget_nav('vouchers') }}</div>
+
+<div class="toolbar no-print">
+  <h2 class="section-title">지출결의서 <span class="mono">{{ v.voucher_no }}</span></h2>
+  <div class="actions">
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+    <form method="post" action="{{ url_for('vouchers.delete', voucher_id=v.id) }}" data-confirm="결의서 {{ v.voucher_no }}을(를) 삭제할까요? 증빙 파일도 함께 삭제되고, 거래내역은 그대로 남습니다.">
+      <button class="btn danger">삭제</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('vouchers.save', voucher_id=v.id) }}" class="voucher-sheet">
+  <h2 class="sheet-title">지 출 결 의 서 <small>임상면역검사학회</small></h2>
+  <table class="vform">
+    <tr>
+      <th>총지출금액</th><td class="v-total">{{ total|won }}<small>거래 {{ txs|length }}건 합계 · 자동</small></td>
+      <th>발의일</th><td><input type="date" name="issued_on" value="{{ v.issued_on or '' }}"></td>
+      <th>지출일</th><td><input type="date" name="paid_on" value="{{ v.paid_on or '' }}" required></td>
+    </tr>
+    <tr>
+      <th>영수자</th><td><input name="receiver" list="receiver-list" value="{{ v.receiver or '' }}" maxlength="40" autocomplete="off">
+        <datalist id="receiver-list">{% for n in officers %}<option value="{{ n }}">{% endfor %}</datalist></td>
+      <th>지출방법</th><td><select name="method">{% for m in methods %}<option value="{{ m }}" {{ 'selected' if v.method == m }}>{{ m }}</option>{% endfor %}</select></td>
+      <th>결의번호</th><td class="mono">{{ v.voucher_no }}</td>
+    </tr>
+    <tr class="v-section"><th colspan="6">지출항목 (예산과목)</th></tr>
+    <tr>
+      <th>선택</th>
+      <td colspan="5">
+        <select name="category_id" aria-label="예산과목">
+          <option value="">(지정 안 함)</option>
+          {% for kind in ('지출',) %}
+          {% for c in categories if c.kind == kind %}<option value="{{ c.id }}" {{ 'selected' if v.category_id == c.id }}>{{ '　' * c.depth }}{{ c.name }}{{ ' ›' if c.has_children }}</option>{% endfor %}
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    <tr class="v-chain"><th>관</th>
+      <td>{{ chain.get(1, '–') }}</td><th>항</th><td>{{ chain.get(2, '–') }}</td><th>목</th><td>{{ chain.get(3, '–') }}</td></tr>
+    <tr>
+      <th>적요</th><td colspan="5"><input name="title" value="{{ v.title }}" maxlength="80" required></td>
+    </tr>
+    <tr>
+      <th>참고사항</th><td colspan="5"><textarea name="note" rows="2" maxlength="500" placeholder="예: 회의록 및 이체내역 참조">{{ v.note or '' }}</textarea></td>
+    </tr>
+  </table>
+  {% if mixed %}<p class="hint warn-note no-print">⚠ 일부 거래의 예산과목이 결의서와 다릅니다. [저장]하면 묶인 모든 거래가 이 예산과목으로 맞춰집니다.</p>{% endif %}
+  <div class="sheet-actions no-print"><button class="btn primary">저장</button>
+    <span class="hint">저장하면 선택한 예산과목이 묶인 모든 거래에 적용됩니다.</span></div>
+</form>
+
+<section class="v-block">
+  <div class="v-block-head"><h3>적요 내역 <small class="muted">거래내역에서 자동으로 가져옵니다</small></h3></div>
+  <div class="table-wrap">
+    <table class="table tx-table">
+      <thead><tr><th>일시</th><th>내용 · 상대방</th><th>회계</th><th class="num">금액</th><th class="no-print actions-col"></th></tr></thead>
+      <tbody>
+      {% for t in txs %}
+        <tr>
+          <td class="nowrap">{{ t.occurred_at|ktx }}</td>
+          <td class="tx-main"><strong>{{ t.memo_own or t.summary or '' }}</strong><span class="tx-sub">{{ t.counterparty or '' }}</span></td>
+          <td class="nowrap">{{ t.fund_alias }}</td>
+          <td class="num minus">{{ t.withdrawal|won }}</td>
+          <td class="no-print actions-col">
+            <form method="post" action="{{ url_for('vouchers.tx_remove', voucher_id=v.id, tx_id=t.id) }}" data-confirm="이 거래를 결의서에서 뺄까요? (거래 자체는 삭제되지 않습니다)">
+              <button class="btn small">빼기</button></form></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">묶인 거래가 없습니다. 아래에서 거래를 추가하세요.</td></tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><th colspan="3">계</th><th class="num minus">{{ total|won }}</th><th class="no-print"></th></tr></tfoot>
+    </table>
+  </div>
+
+  <details class="v-add no-print">
+    <summary>+ 거래 더 추가하기 <small class="muted">아직 묶지 않은 출금 거래 {{ candidates|length }}{{ '+' if candidates|length >= 80 }}건</small></summary>
+    {% if candidates %}
+    <form method="post" action="{{ url_for('vouchers.tx_add', voucher_id=v.id) }}">
+      <div class="table-wrap cand-wrap"><table class="table tx-table"><tbody>
+        {% for t in candidates %}
+        <tr><td class="check-col"><input type="checkbox" name="ids" value="{{ t.id }}" aria-label="선택"></td>
+          <td class="nowrap">{{ t.occurred_at|ktx }}</td>
+          <td class="tx-main"><strong>{{ t.memo_own or t.summary or '' }}</strong><span class="tx-sub">{{ t.counterparty or '' }}</span></td>
+          <td class="num minus">{{ t.withdrawal|won }}</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      <div class="dialog-actions"><button class="btn primary">선택한 거래 추가</button></div>
+    </form>
+    {% else %}<p class="muted">추가할 수 있는 거래가 없습니다.</p>{% endif %}
+  </details>
+</section>
+
+<section class="v-block evidence" data-upload-url="{{ url_for('vouchers.upload', voucher_id=v.id) }}">
+  <div class="v-block-head"><h3>증빙 <small class="muted">칸을 한 번 클릭한 뒤 Ctrl+V 로 이미지를 붙여넣으세요</small></h3></div>
+  <div class="ev-grid">
+    <div class="paste-zone" tabindex="0" data-slot="form">
+      <h4>결의서 이미지</h4>
+      <p class="paste-tip no-print">📋 여기를 클릭 → Ctrl+V</p>
+      {{ file_cell('voucher_form-' ~ v.id, form_files, url_for('vouchers.upload', voucher_id=v.id), {'slot': 'form'}, accept, next_url) }}
+    </div>
+    <div class="paste-zone" tabindex="0" data-slot="receipt">
+      <h4>영수증</h4>
+      <p class="paste-tip no-print">📋 여기를 클릭 → Ctrl+V</p>
+      {{ file_cell('voucher_receipt-' ~ v.id, receipt_files, url_for('vouchers.upload', voucher_id=v.id), {'slot': 'receipt'}, accept, next_url) }}
+    </div>
+  </div>
+  <p class="paste-status no-print" id="paste-status" role="status"></p>
+</section>
+
+{{ viewer_dialog() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='attach.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+<script src="{{ url_for('static', filename='vouchers.js') }}"></script>
+{% endblock %}

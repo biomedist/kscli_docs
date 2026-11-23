@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_budget_nav.html" import budget_nav %}
+{% block title %}결산표 · {{ app_title }}{% endblock %}
+{% block header_title %}예산·결산 현황{% endblock %}
+
+{% macro section(kind, sec, label_pct) %}
+<div class="table-wrap settle-wrap">
+  <table class="table settle-table {{ 'inc' if kind == '수입' else 'exp' }}">
+    <thead><tr>
+      <th class="s-name">{{ kind }} 과목 <small>관 › 항 › 목</small></th>
+      <th class="num">예산</th><th class="num">실적</th><th class="s-pct">{{ label_pct }}</th><th class="s-note">비고</th>
+    </tr></thead>
+    <tbody>
+    {% for r in sec.rows %}
+      <tr class="lv{{ r.level }}">
+        <td class="s-name" style="padding-left: {{ 10 + r.depth * 18 }}px">{{ r.name }}</td>
+        <td class="num">
+          {% if edit and r.leaf %}<input class="amt" name="amt_{{ r.id }}" inputmode="numeric" value="{{ r.own_budget or '' }}" placeholder="0" aria-label="{{ r.name }} 예산">
+          {% else %}{{ r.budget|comma if r.budget else '' }}{% endif %}
+        </td>
+        <td class="num">{{ r.actual|comma if r.actual else '' }}</td>
+        <td class="s-pct">
+          {% if r.pct is not none %}
+            <div class="bar {{ 'bar-inc' if kind == '수입' else ('over' if r.pct > 100 else ('warn' if r.pct >= 80 else 'ok')) }}"
+                 title="{{ '실적' }} {{ r.actual|comma }} / 예산 {{ r.budget|comma }}">
+              <span style="width: {{ [r.pct, 100]|min }}%"></span></div>
+            <span class="pct-num">{{ r.pct }}%</span>
+          {% elif r.actual %}<span class="muted">예산 없음</span>{% endif %}
+        </td>
+        <td class="s-note">{% if edit %}<input class="note-in" name="note_{{ r.id }}" value="{{ r.note_raw }}" maxlength="200" aria-label="{{ r.name }} 비고">{% else %}{{ r.note }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    {% if sec.unclassified %}
+      <tr class="unclassified-row">
+        <td class="s-name">⚠ 미분류 <small>예산과목이 없는 거래</small></td><td class="num"></td>
+        <td class="num">{{ sec.unclassified|comma }}</td><td class="s-pct"></td>
+        <td class="s-note"><a class="warn-link" href="{{ url_for('budget.transactions', status='unclassified', account=(fund if fund != 'all' else None)) }}">분류하러 가기 →</a></td>
+      </tr>
+    {% endif %}
+    </tbody>
+    <tfoot><tr>
+      <th class="s-name">{{ kind }} 합계</th>
+      <th class="num">{{ sec.budget|comma }}</th><th class="num">{{ sec.actual|comma }}</th>
+      <th class="s-pct">{% if sec.pct is not none %}<span class="pct-num">{{ sec.pct }}%</span>{% endif %}</th><th></th>
+    </tr></tfoot>
+  </table>
+</div>
+{% endmacro %}
+
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>예산·결산 현황</h1>
+</section>
+{{ budget_nav('settlement') }}
+
+<form method="get" class="toolbar settle-filter no-print" id="settle-form">
+  <div class="filters">
+    <label>기간 <input type="date" name="start" value="{{ start }}" required> ~ <input type="date" name="end" value="{{ end }}" required></label>
+    <select name="fund" aria-label="회계" onchange="this.form.submit()">
+      <option value="all" {{ 'selected' if fund == 'all' }}>합계 (전체 회계)</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if fund == a.id|string }}>{{ a.alias or ('통장 ' ~ a.id) }}</option>{% endfor %}
+    </select>
+    <label class="check"><input type="checkbox" name="empty" value="1" {{ 'checked' if show_empty }} onchange="this.form.submit()"> 빈 과목도 보기</label>
+    <button class="btn">조회</button>
+  </div>
+  <div class="actions">
+    {% if fund != 'all' and not edit %}<a class="btn" href="{{ url_for('settlement.view', start=start, end=end, fund=fund, edit=1) }}">✎ {{ end.year }}년 예산 입력</a>{% endif %}
+    <a class="btn" href="{{ url_for('settlement.export', start=start, end=end, fund=fund) }}">엑셀 저장</a>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</form>
+<p class="presets no-print">빠른 선택:
+  {% for label, s, e in presets %}<a class="pill" href="{{ url_for('settlement.view', start=s, end=e, fund=fund) }}">{{ label }}</a>{% endfor %}</p>
+
+<h2 class="print-only">결산표 — {{ '합계' if fund == 'all' else data.name.get(fund|int, '') }} · {{ start.strftime('%Y.%m.%d') }} ~ {{ end.strftime('%Y.%m.%d') }}</h2>
+
+{# ----- 알림 ----- #}
+<div class="settle-alerts no-print">
+  {% if data.unclassified.n %}
+  <div class="alert warn">⚠ 예산과목이 없는 거래가 <strong>{{ data.unclassified.n }}건</strong> 있습니다
+    (입금 {{ data.unclassified.d|won }} · 출금 {{ data.unclassified.w|won }}). 표에는 '미분류'로 따로 잡혀 있어요.
+    <a class="inline-link" href="{{ url_for('budget.transactions', status='unclassified', account=(fund if fund != 'all' else None)) }}">분류하러 가기 →</a></div>
+  {% endif %}
+  {% if not data.has_budget %}
+  <div class="alert info">{{ end.year }}년 예산이 아직 입력되지 않았습니다.
+    {% if fund == 'all' %}회계를 하나 고른 뒤 [예산 입력]을 눌러 주세요.{% else %}위의 [✎ 예산 입력]으로 목마다 예산을 넣어 주세요.{% endif %}</div>
+  {% endif %}
+  {% if spans %}<div class="alert info">기간이 두 해에 걸쳐 있어 예산은 {{ end.year }}년 기준으로 표시합니다.</div>{% endif %}
+  {% if data.check and not data.all_ok %}
+  <div class="alert warn">⚠ 통장 잔액 검증에서 확인이 필요한 항목이 있습니다. 아래 [잔액 검증]을 확인해 주세요.</div>
+  {% endif %}
+</div>
+
+<div class="sum-card compact settle-sum">
+  <div><div class="sum-label">수입 실적</div><div class="sum-amount plus">{{ inc.actual|won }}</div></div>
+  <div><div class="sum-label">지출 실적</div><div class="sum-amount minus">{{ exp.actual|won }}</div></div>
+  <div><div class="sum-label">차인 (수입−지출)</div><div class="sum-amount small">{{ balance_diff|won }}</div></div>
+  <div><div class="sum-label">결산 잔액 (기간 끝)</div><div class="sum-amount small">{{ data.closing|won }}</div></div>
+  <div class="sum-note">
+    {% if data.all_ok %}<span class="verify ok">✓ 통장 잔액과 일치</span>{% elif data.check %}<span class="verify bad">⚠ 잔액 검증 확인 필요</span>{% endif %}<br>
+    <small>찬조금도 거래내역에 포함되어 있어 따로 더하지 않습니다.</small>
+  </div>
+</div>
+
+{% if edit %}
+<form method="post" action="{{ url_for('settlement.save') }}" class="budget-edit">
+  <input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}"><input type="hidden" name="fund" value="{{ fund }}">
+  <div class="alert info">✎ <strong>{{ end.year }}년 {{ data.name.get(fund|int, '') }}</strong> 예산을 입력하는 중입니다. 가장 아래 단계(목)에 입력하면 항·관 예산은 자동으로 합쳐집니다.</div>
+{% endif %}
+
+{{ section('수입', inc, '달성률') }}
+{{ section('지출', exp, '소진율') }}
+
+<div class="table-wrap settle-wrap net-wrap">
+  <table class="table settle-table"><tfoot><tr>
+    <th class="s-name">차인 (수입 − 지출)</th>
+    <th class="num">{{ (inc.budget - exp.budget)|comma }}</th><th class="num">{{ balance_diff|comma }}</th><th></th><th></th>
+  </tr></tfoot></table>
+</div>
+
+{% if edit %}
+  <div class="sheet-actions"><button class="btn primary">예산 저장</button>
+    <a class="btn" href="{{ url_for('settlement.view', start=start, end=end, fund=fund) }}">취소</a></div>
+</form>
+{% endif %}
+
+<section class="v-block verify-block">
+  <div class="v-block-head"><h3>잔액 검증 <small class="muted">전기이월금 + 거래 합계가 통장에 찍힌 마지막 잔액과 맞는지 확인합니다 (빠진 거래 찾기)</small></h3></div>
+  <div class="table-wrap">
+    <table class="table verify-table">
+      <thead><tr><th>회계(통장)</th><th class="num">전기이월 <small>(기간 시작)</small></th><th class="num">입금</th><th class="num">출금</th><th class="num">이체</th>
+        <th class="num">결산 잔액</th><th class="num">통장 표시 잔액</th><th>판정</th></tr></thead>
+      <tbody>
+      {% for c in data.check %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td class="num">{{ c.carry|comma }}</td><td class="num plus">{{ c.d|comma }}</td><td class="num minus">{{ c.w|comma }}</td>
+          <td class="num">{{ c.tr|comma if c.tr else '' }}</td>
+          <td class="num"><strong>{{ c.closing|comma }}</strong></td>
+          <td class="num">{{ c.bank|comma if c.bank is not none else '–' }}</td>
+          <td>
+            {% if c.status == 'ok' %}<span class="verify ok">✓ 일치</span>
+            {% elif c.status == 'diff' %}<span class="verify bad">⚠ {{ c.diff|comma }}원 차이</span><small class="muted block">거래가 빠졌거나 이월금이 다를 수 있어요. 은행 엑셀을 다시 올려 보세요.</small>
+            {% elif c.status == 'no_opening' %}<span class="verify warn">전기이월 미입력</span><small class="muted block"><a class="inline-link" href="{{ url_for('finance.accounts') }}">예금통장·카드 현황</a>에서 {{ start.year }}년 이월금을 입력하세요.</small>
+            {% else %}<span class="muted">거래 없음</span>{% endif %}
+            {% if c.adj %}<small class="muted block">다른 회계로 옮긴 거래 {{ c.adj|comma }}원 반영</small>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      {% if data.check|length > 1 %}
+      <tfoot><tr><th>합계</th><th class="num">{{ data.carry|comma }}</th><th class="num">{{ data.check|sum(attribute='d')|comma }}</th><th class="num">{{ data.check|sum(attribute='w')|comma }}</th>
+        <th class="num"></th><th class="num">{{ data.closing|comma }}</th><th></th><th></th></tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_budget_nav.html" import budget_nav %}
+{% block title %}지출결의 · {{ app_title }}{% endblock %}
+{% block header_title %}예산·결산 현황{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>예산·결산 현황</h1>
+</section>
+{{ budget_nav('vouchers') }}
+
+<div class="toolbar no-print">
+  <nav class="tabs" aria-label="연도">
+    {% for y in years %}<a class="tab {{ 'active' if (not show_all and year == y) }}" href="{{ url_for('vouchers.list_view', year=y) }}">{{ y }}</a>{% endfor %}
+    <a class="tab {{ 'active' if show_all }}" href="{{ url_for('vouchers.list_view', year='all') }}">전체</a>
+  </nav>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('vouchers.new', year=('all' if show_all else year)) }}">+ 결의서 만들기</a>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if unbundled.n %}
+<p class="hint voucher-hint no-print">결의서로 묶지 않은 출금 거래가 <strong>{{ unbundled.n }}건</strong>({{ unbundled.s|won }}) 있습니다.
+  <a class="inline-link" href="{{ url_for('vouchers.new', year=('all' if show_all else year)) }}">묶으러 가기 →</a></p>
+{% endif %}
+
+{% if rows %}
+<div class="table-wrap">
+  <table class="table voucher-table">
+    <thead><tr>
+      <th>결의번호</th><th>지출일</th><th>적요</th><th>영수자</th><th>지출방법</th><th>예산과목</th>
+      <th class="num">금액</th><th class="num">거래</th><th>증빙</th><th class="no-print actions-col"></th>
+    </tr></thead>
+    <tbody>
+    {% for v in rows %}
+      {% set nf = files.get((form_type, v.id), [])|length %}{% set nr = files.get((receipt_type, v.id), [])|length %}
+      <tr>
+        <td class="nowrap"><a href="{{ url_for('vouchers.detail', voucher_id=v.id) }}">{{ v.voucher_no }}</a></td>
+        <td class="nowrap">{{ v.paid_on|kdate }}</td>
+        <td class="title-col">{{ v.title }}</td>
+        <td class="nowrap">{{ v.receiver or '' }}</td>
+        <td class="nowrap">{{ v.method }}</td>
+        <td class="cat-path">{% if v.category_id %}{{ paths.get(v.category_id, '') }}{% else %}<span class="badge unclassified">미지정</span>{% endif %}</td>
+        <td class="num minus">{{ v.total|won }}</td>
+        <td class="num">{{ v.n }}건</td>
+        <td class="nowrap">
+          <span class="ev {{ 'ok' if nf else 'none' }}" title="결의서 이미지">결의서 {{ '✓' if nf else '–' }}</span>
+          <span class="ev {{ 'ok' if nr else 'none' }}" title="영수증">영수증 {{ nr if nr else '–' }}</span>
+        </td>
+        <td class="no-print actions-col"><a class="btn small open-btn" href="{{ url_for('vouchers.detail', voucher_id=v.id) }}">열기</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="summary">결의서 {{ rows|length }}장 · 합계 {{ rows|sum(attribute='total')|won }}</p>
+{% else %}
+<div class="empty"><p>{{ '' if show_all else year ~ '년에 ' }}만든 지출결의서가 없습니다. [+ 결의서 만들기]에서 출금 거래를 골라 묶거나, 거래내역에서 거래를 체크하고 [지출결의로 묶기]를 누르세요.</p></div>
+{% endif %}
+{% endblock %}

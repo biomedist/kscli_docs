@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="intro">
+  <h1>{{ app_title }}</h1>
+  <p>관리할 목록을 선택해 시작하세요.</p>
+</section>
+<div class="cards">
+  <a class="card" style="--accent:#1d6b53" href="{{ url_for('audit_home') }}">
+    <span class="card-icon">🗂️</span>
+    <h2>행정지도감사</h2>
+    <p>연말 학회 내부 인증에 필요한 문서를 모아 관리합니다.</p>
+    <span class="card-go">열기 →</span>
+  </a>
+</div>
+{% endblock %}

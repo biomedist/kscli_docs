@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">{{ page.desc }}</p>
+</section>
+
+<div class="toolbar no-print">
+  <nav class="tabs" aria-label="연도">
+    {% for y in years %}
+      <a class="tab {{ 'active' if y == year }}" href="{{ url_for('donations.list_view', year=y) }}">{{ y }}</a>
+    {% endfor %}
+  </nav>
+  <div class="actions"><button type="button" class="btn" onclick="window.print()">인쇄</button></div>
+</div>
+
+<div class="sum-card">
+  <div>
+    <div class="sum-label">{{ year }}년 찬조금 합계</div>
+    <div class="sum-amount">{{ total|won }}</div>
+    <div class="sum-sub">{{ count }}건</div>
+  </div>
+  {% if kind_rows %}
+  <ul class="sum-kinds">
+    {% for k in kind_rows %}<li><span>{{ k.kind }}</span><strong>{{ k.total|won }}</strong><small>{{ k.n }}건</small></li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<div class="table-wrap">
+  <table class="table don-table">
+    <thead><tr>
+      <th>구분</th><th>행사명</th><th>일자</th><th class="num">찬조 건수</th><th class="num">찬조금 합계</th><th class="no-print"></th>
+    </tr></thead>
+    <tbody>
+    {% for e in events %}
+      {% set url = url_for('donations.event_detail', event_id=e.id) %}
+      <tr class="event-row" data-href="{{ url }}">
+        <td><span class="kind-badge kind-{{ e.kind }}">{{ e.kind }}</span></td>
+        <td class="title-col"><a href="{{ url }}">{{ e.name or (e.kind ~ ' 프로그램') }}</a></td>
+        <td class="nowrap">{{ e.held_on|kdate }}</td>
+        <td class="num">{{ e.n }}건</td>
+        <td class="num amount">{{ e.total|won }}</td>
+        <td class="no-print"><a class="btn small" href="{{ url }}">{{ '내역 보기' if e.n else '+ 찬조금 입력' }}</a></td>
+      </tr>
+    {% endfor %}
+      {% set gurl = url_for('donations.general_detail', year=year) %}
+      <tr class="event-row general-row" data-href="{{ gurl }}">
+        <td><span class="kind-badge">행사 외</span></td>
+        <td class="title-col"><a href="{{ gurl }}">행사와 무관한 찬조</a></td>
+        <td class="muted nowrap">{{ year }}년</td>
+        <td class="num">{{ general.n }}건</td>
+        <td class="num amount">{{ general.total|won }}</td>
+        <td class="no-print"><a class="btn small" href="{{ gurl }}">{{ '내역 보기' if general.n else '+ 찬조금 입력' }}</a></td>
+      </tr>
+    </tbody>
+    <tfoot><tr><td colspan="3">합계</td><td class="num">{{ count }}건</td><td class="num amount">{{ total|won }}</td><td class="no-print"></td></tr></tfoot>
+  </table>
+</div>
+{% if not events %}
+<p class="hint">{{ year }}년에 등록된 행사가 없습니다. 교육·학술대회·워크숍 메뉴에서 행사를 등록하면 이곳에 나타납니다.</p>
+{% endif %}
+<p class="summary no-print">행사 줄을 누르면 찬조금 내역이 열립니다. 연도는 행사 일자 기준이고, 행사와 무관한 찬조는 받은 일자 기준입니다.</p>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='events.js') }}"></script>{% endblock %}

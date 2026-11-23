@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% from "_files.html" import file_cell, viewer_dialog %}
+{% from "_forms.html" import event_dialog, time_select %}
+{% block title %}{{ event.name or event.kind }} · {{ app_title }}{% endblock %}
+{% block header_title %}행사 프로그램{% endblock %}
+
+{% block content %}
+{% set next_url = request.full_path.rstrip('?') %}
+{% set year = event.held_on[:4] %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('events.list_view', year=year) }}">← 교육·학술대회·워크숍 ({{ year }}년)</a>
+  <h1><span class="kind-badge kind-{{ event.kind }}">{{ event.kind }}</span> {{ event.name or (event.kind ~ ' 프로그램') }}</h1>
+</section>
+
+<div class="event-card">
+  <dl class="event-meta">
+    <div><dt>일자</dt><dd>{{ event.held_on|kdate }}</dd></div>
+    <div><dt>시간</dt><dd>{{ event|krange or '-' }}</dd></div>
+    <div><dt>개최장소</dt><dd>{{ event.place or '-' }}</dd></div>
+    <div><dt>참석수</dt><dd>{{ (event.attendees ~ '명') if event.attendees is not none else '-' }}</dd></div>
+    <div class="meta-files"><dt>관련문서</dt>
+      <dd>{{ file_cell('event_doc-' ~ event.id, event_files, url_for('events.upload', event_id=event.id),
+                       {'back': 'detail'}, accept, next_url) }}</dd></div>
+  </dl>
+  <button type="button" class="btn small no-print" data-open-edit="event-dialog"
+          data-id="{{ event.id }}" data-kind="{{ event.kind }}" data-name="{{ event.name or '' }}"
+          data-held-on="{{ event.held_on or '' }}" data-start-time="{{ event.start_time or '' }}"
+          data-end-time="{{ event.end_time or '' }}" data-place="{{ event.place or '' }}"
+          data-attendees="{{ event.attendees if event.attendees is not none else '' }}">행사 정보 수정</button>
+</div>
+
+<div class="toolbar no-print">
+  <h2 class="section-title">프로그램</h2>
+  <div class="actions">
+    <button type="button" class="btn primary" data-open-add="program-dialog">+ 프로그램 추가</button>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if programs %}
+<div class="table-wrap">
+  <table class="table programs-table">
+    <thead><tr>
+      <th>시간</th><th>강의명</th><th class="speaker-col">강연자</th><th>소속</th><th>발표자료</th>
+      <th class="no-print actions-col">편집</th>
+    </tr></thead>
+    <tbody>
+    {% for p in programs %}
+      <tr>
+        <td class="nowrap">{{ p|krange }}</td>
+        <td class="title-col">{{ p.title }}</td>
+        <td class="speaker-col">{{ p.speaker or '' }}</td>
+        <td>{{ p.affiliation or '' }}</td>
+        <td class="file-col">
+          {{ file_cell('event_material-' ~ p.id, program_files.get(('event_material', p.id), []),
+                       url_for('events.program_upload', program_id=p.id), {}, accept, next_url) }}
+        </td>
+        <td class="no-print actions-col">
+          <button type="button" class="btn small" data-open-edit="program-dialog"
+                  data-id="{{ p.id }}" data-title="{{ p.title }}" data-speaker="{{ p.speaker or '' }}"
+                  data-affiliation="{{ p.affiliation or '' }}" data-start-time="{{ p.start_time or '' }}"
+                  data-end-time="{{ p.end_time or '' }}">수정</button>
+          <button type="button" class="btn small" data-copy title="이 줄을 바탕으로 다음 프로그램을 추가합니다"
+                  data-title="{{ p.title }}" data-speaker="{{ p.speaker or '' }}"
+                  data-affiliation="{{ p.affiliation or '' }}" data-next-start="{{ p.end_time or '' }}">복사</button>
+          <form method="post" action="{{ url_for('events.program_delete', program_id=p.id) }}"
+                data-confirm="'{{ p.title }}' 프로그램을 삭제할까요? 발표자료도 함께 삭제됩니다.">
+            <button class="btn small danger">삭제</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="summary">프로그램 {{ programs|length }}개</p>
+{% else %}
+<div class="empty"><p>아직 등록된 프로그램이 없습니다. 오른쪽 위 [+ 프로그램 추가]로 시간별 강의를 입력하세요.</p></div>
+{% endif %}
+
+{{ event_dialog(kinds, 'detail') }}
+
+<dialog id="program-dialog" class="wide"
+        data-add-url="{{ url_for('events.program_add', event_id=event.id) }}"
+        data-edit-url="{{ url_for('events.program_edit', program_id=0) }}"
+        data-add-title="프로그램 추가" data-edit-title="프로그램 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <div class="row2">
+      <label>시작 시간 {{ time_select('start', 5) }}</label>
+      <label>종료 시간 {{ time_select('end', 5) }}</label>
+    </div>
+    <label>강의명
+      <input name="title" required maxlength="160" autocomplete="off">
+    </label>
+    <div class="row2">
+      <label>강연자
+        <input name="speaker" maxlength="80" autocomplete="off">
+      </label>
+      <label>소속
+        <input name="affiliation" maxlength="80" autocomplete="off">
+      </label>
+    </div>
+    <p class="hint">표의 [복사]를 누르면 강의명·강연자·소속이 채워지고, 시작 시간은 원본의 종료 시간으로 맞춰집니다.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+{{ viewer_dialog() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='attach.js') }}"></script>
+<script src="{{ url_for('static', filename='timeselect.js') }}"></script>
+<script src="{{ url_for('static', filename='events.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+{% endblock %}

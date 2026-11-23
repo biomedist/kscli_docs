@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% from "_files.html" import file_cell, viewer_dialog %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+
+{% macro card_row(c, next_url) %}
+  <li class="card-row">
+    <div class="card-row-main">
+      <strong>💳 {{ c.name }}</strong>
+      {% if c.number %}<span class="mono">{{ c.number }}</span>{% endif %}
+      {% if c.holder %}<span class="muted">소지자 {{ c.holder }}</span>{% endif %}
+      {% if c.memo %}<span class="muted">{{ c.memo }}</span>{% endif %}
+      <span class="card-row-actions no-print">
+        <button type="button" class="btn small" data-open-edit="card-dialog"
+                data-id="{{ c.id }}" data-name="{{ c.name }}" data-number="{{ c.number or '' }}"
+                data-account-id="{{ c.account_id or '' }}" data-holder="{{ c.holder or '' }}"
+                data-memo="{{ c.memo or '' }}">수정</button>
+        <form method="post" action="{{ url_for('finance.card_delete', card_id=c.id) }}"
+              data-confirm="'{{ c.name }}' 카드를 삭제할까요?">
+          <button class="btn small danger">삭제</button>
+        </form>
+      </span>
+    </div>
+    {{ file_cell('card_copy-' ~ c.id, files.get(('card_copy', c.id), []),
+                 url_for('finance.card_upload', card_id=c.id), {}, accept, next_url) }}
+  </li>
+{% endmacro %}
+
+{% block content %}
+{% set next_url = request.full_path.rstrip('?') %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">{{ page.desc }}</p>
+</section>
+
+<div class="toolbar no-print">
+  <p class="hint">계좌번호와 카드번호는 <strong>가려서</strong> 입력하세요. 예: <span class="mono">0484XX-XX-XX6718</span></p>
+  <div class="actions">
+    <button type="button" class="btn primary" data-open-add="account-dialog">+ 통장 추가</button>
+    <button type="button" class="btn" data-open-add="card-dialog">+ 카드 추가</button>
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if accounts %}
+<div class="account-grid">
+  {% for a in accounts %}
+  <article class="account-card">
+    <header class="account-head">
+      <span class="alias-badge">{{ a.alias }}</span>
+      <span class="bank">{{ a.bank or '' }}</span>
+      <span class="account-actions no-print">
+        <button type="button" class="btn small" data-open-edit="account-dialog"
+                data-id="{{ a.id }}" data-alias="{{ a.alias }}" data-bank="{{ a.bank or '' }}"
+                data-number="{{ a.number or '' }}" data-product-name="{{ a.product_name or '' }}"
+                data-purpose="{{ a.purpose or '' }}" data-memo="{{ a.memo or '' }}">수정</button>
+        <form method="post" action="{{ url_for('finance.account_delete', account_id=a.id) }}"
+              data-confirm="'{{ a.alias }}' 통장을 삭제할까요? 이월금과 통장 사본이 함께 삭제되고, 연결된 카드는 '통장 미연결'로 옮겨집니다.">
+          <button class="btn small danger">삭제</button>
+        </form>
+      </span>
+    </header>
+    <p class="account-number mono">{{ a.number or '번호 미입력' }}</p>
+    <dl class="account-meta">
+      {% if a.product_name %}<div><dt>계좌명</dt><dd>{{ a.product_name }}</dd></div>{% endif %}
+      {% if a.purpose %}<div><dt>용도</dt><dd>{{ a.purpose }}</dd></div>{% endif %}
+      {% if a.memo %}<div><dt>메모</dt><dd>{{ a.memo }}</dd></div>{% endif %}
+    </dl>
+
+    <h3 class="account-sub">통장 사본</h3>
+    {{ file_cell('account_copy-' ~ a.id, files.get(('account_copy', a.id), []),
+                 url_for('finance.account_upload', account_id=a.id), {}, accept, next_url) }}
+
+    <h3 class="account-sub">전기 이월금
+      <button type="button" class="btn small no-print" data-open-add="opening-dialog"
+              data-add-url="{{ url_for('finance.opening_add', account_id=a.id) }}"
+              data-add-title="{{ a.alias }} 전기 이월금 입력">+ 입력</button>
+    </h3>
+    {% if openings.get(a.id) %}
+    <table class="mini-table">
+      {% for o in openings[a.id] %}
+      <tr>
+        <td>{{ o.year }}년</td>
+        <td class="amount">{{ o.amount|won }}</td>
+        <td class="muted">{{ o.note or '' }}</td>
+        <td class="no-print mini-actions">
+          <button type="button" class="btn small" data-open-edit="opening-dialog"
+                  data-id="{{ o.id }}" data-year="{{ o.year }}" data-amount="{{ o.amount }}"
+                  data-note="{{ o.note or '' }}">수정</button>
+          <form method="post" action="{{ url_for('finance.opening_delete', opening_id=o.id) }}"
+                data-confirm="{{ o.year }}년 이월금을 삭제할까요?">
+            <button class="btn small danger">삭제</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted small-note">입력된 이월금이 없습니다. 예결산에서 연초 잔액으로 쓰입니다.</p>
+    {% endif %}
+
+    <h3 class="account-sub">연결된 카드 ({{ cards_by_account.get(a.id, [])|length }}장)</h3>
+    {% if cards_by_account.get(a.id) %}
+      <ul class="card-list">{% for c in cards_by_account[a.id] %}{{ card_row(c, next_url) }}{% endfor %}</ul>
+    {% else %}
+      <p class="muted small-note">연결된 카드가 없습니다.</p>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p>등록된 통장이 없습니다. 오른쪽 위 [+ 통장 추가]로 경상비 통장과 보수교육비 통장을 등록하세요.</p></div>
+{% endif %}
+
+{% if unlinked_cards %}
+<section class="unlinked">
+  <h3 class="account-sub">통장 미연결 카드</h3>
+  <ul class="card-list">{% for c in unlinked_cards %}{{ card_row(c, next_url) }}{% endfor %}</ul>
+</section>
+{% endif %}
+
+<dialog id="account-dialog" class="wide" data-add-url="{{ url_for('finance.account_add') }}"
+        data-edit-url="{{ url_for('finance.account_edit', account_id=0) }}"
+        data-add-title="통장 추가" data-edit-title="통장 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <div class="row2">
+      <label>별칭
+        <input name="alias" list="alias-hints" required maxlength="30" autocomplete="off" placeholder="경상비">
+      </label>
+      <label>은행
+        <input name="bank" maxlength="30" autocomplete="off" placeholder="국민은행">
+      </label>
+    </div>
+    <datalist id="alias-hints">{% for h in alias_hints %}<option value="{{ h }}">{% endfor %}</datalist>
+    <label>계좌번호 (가려서 입력)
+      <input name="number" maxlength="40" autocomplete="off" placeholder="0484XX-XX-XX6718">
+    </label>
+    <label>계좌명
+      <input name="product_name" maxlength="60" autocomplete="off">
+    </label>
+    <label>용도
+      <input name="purpose" maxlength="80" autocomplete="off">
+    </label>
+    <label>메모
+      <input name="memo" maxlength="120" autocomplete="off">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="card-dialog" class="wide" data-add-url="{{ url_for('finance.card_add') }}"
+        data-edit-url="{{ url_for('finance.card_edit', card_id=0) }}"
+        data-add-title="카드 추가" data-edit-title="카드 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <label>카드명 (카드사)
+      <input name="name" required maxlength="60" autocomplete="off" placeholder="국민 체크카드">
+    </label>
+    <label>카드번호 (가려서 입력)
+      <input name="number" maxlength="40" autocomplete="off" placeholder="1234-56XX-XXXX-3456">
+    </label>
+    <label>연결 통장
+      <select name="account_id">
+        <option value="">(연결 안 함)</option>
+        {% for a in accounts %}<option value="{{ a.id }}">{{ a.alias }}{{ ' · ' ~ a.number if a.number }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="row2">
+      <label>소지자
+        <input name="holder" maxlength="40" autocomplete="off">
+      </label>
+      <label>메모
+        <input name="memo" maxlength="120" autocomplete="off">
+      </label>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="opening-dialog" data-add-url="" data-edit-url="{{ url_for('finance.opening_edit', opening_id=0) }}"
+        data-add-title="전기 이월금 입력" data-edit-title="전기 이월금 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <p class="hint">전년도에서 넘어온 금액입니다. 예: 2026회기의 이월금은 2025년 마감 잔액.</p>
+    <div class="row2">
+      <label>회기 연도
+        <input name="year" type="number" min="2000" max="2100" required placeholder="2026">
+      </label>
+      <label>이월금 (원)
+        <input name="amount" type="text" inputmode="numeric" required autocomplete="off" placeholder="31,848,545">
+      </label>
+    </div>
+    <label>메모
+      <input name="note" maxlength="120" autocomplete="off" placeholder="예: 25회기 마감 이월금">
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+{{ viewer_dialog() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+<script src="{{ url_for('static', filename='attach.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer.js') }}"></script>
+{% endblock %}

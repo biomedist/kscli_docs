@@ -1,0 +1,9 @@
+{# 예산·결산 화면 위쪽 탭 #}
+{% macro budget_nav(active) %}
+<nav class="tabs budget-nav no-print" aria-label="예산·결산">
+  <a class="tab {{ 'active' if active == 'settlement' }}" href="{{ url_for('settlement.view') }}">결산표</a>
+  <a class="tab {{ 'active' if active == 'transactions' }}" href="{{ url_for('budget.transactions') }}">거래내역</a>
+  <a class="tab {{ 'active' if active == 'vouchers' }}" href="{{ url_for('vouchers.list_view') }}">지출결의</a>
+  <a class="tab {{ 'active' if active == 'categories' }}" href="{{ url_for('budget.categories') }}">예산과목</a>
+</nav>
+{% endmacro %}

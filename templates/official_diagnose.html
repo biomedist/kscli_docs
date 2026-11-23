@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}기안일자 못 읽은 공문 · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <a class="back" href="{{ url_for('official.list_view', year='all') }}">← 공문 수·발신 내역</a>
+  <h1>기안일자를 읽지 못한 공문</h1>
+  <p>PDF 안의 글자를 읽어 본 결과입니다. 이유별 건수와, 각 공문에서 읽힌 글의 일부를 보여 드립니다. (⏎ 는 줄바꿈)</p>
+</section>
+
+<p class="hint ocr-line">글자 인식(OCR): {% if ocr.ready %}<strong class="verify ok">✓ {{ ocr.reason }}</strong>{% else %}<strong class="verify warn">사용 안 함</strong> — {{ ocr.reason }}{% endif %}</p>
+{% if rows %}
+<ul class="diag-sum">{% for label, n in reasons.items() %}<li><strong>{{ n }}건</strong> · {{ label }}</li>{% endfor %}</ul>
+<div class="table-wrap">
+  <table class="table diag-table">
+    <thead><tr><th>공문 제목</th><th>이유</th><th>읽힌 글 (일부)</th><th class="actions-col"></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="title-col"><a href="{{ url_for('documents.document_view', doc_id=r.id) }}">{{ r.title }}</a></td>
+        <td>{{ r.label }}</td>
+        <td class="snippet">{{ r.snippet }}</td>
+        <td class="actions-col"><button type="button" class="btn small" data-open-edit="draft-dialog" data-id="{{ r.id }}" data-title="{{ r.title }}" data-drafted-on="" data-view-year="">날짜 입력</button></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty"><p>기안일자가 비어 있는 공문이 없습니다. 🎉</p></div>
+{% endif %}
+
+<dialog id="draft-dialog" data-edit-url="{{ url_for('official.edit', doc_id=0) }}" data-edit-title="공문 수정">
+  <form method="post" class="dialog-form">
+    <h3 class="dialog-title"></h3>
+    <input type="hidden" name="view_year">
+    <label>기안일자<input type="date" name="drafted_on"></label>
+    <label>공문 제목<input name="title" maxlength="160" autocomplete="off"></label>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>취소</button>
+      <button class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='dialogs.js') }}"></script>
+{% endblock %}
