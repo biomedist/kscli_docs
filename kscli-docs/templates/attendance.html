@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} · {{ app_title }}{% endblock %}
+{% block header_title %}{{ page.title }}{% endblock %}
+{% block content %}
+{% set scope = '전체' if show_all else selected ~ '년' %}
+<section class="intro">
+  <a class="back no-print" href="{{ url_for('audit_home') }}">← 행정지도감사</a>
+  <h1>{{ page.title }}</h1>
+  <p class="no-print">{{ page.desc }}</p>
+  <h2 class="print-only">{{ scope }}</h2>
+</section>
+
+<div class="toolbar no-print">
+  <nav class="tabs" aria-label="연도">
+    {% for y in years %}
+      <a class="tab {{ 'active' if (not show_all and selected == y|string) }}"
+         href="{{ url_for('meetings.attendance', year=y) }}">{{ y }}</a>
+    {% endfor %}
+    <a class="tab {{ 'active' if show_all }}" href="{{ url_for('meetings.attendance', year='all') }}">전체</a>
+  </nav>
+  <div class="actions">
+    <button type="button" class="btn" onclick="window.print()">인쇄</button>
+  </div>
+</div>
+
+{% if table %}
+<div class="table-wrap">
+  <table class="table att-table">
+    <thead><tr>
+      <th class="num">회의개최일수</th><th>임원성명</th><th class="num">참석횟수</th><th class="num">불참횟수</th>
+    </tr></thead>
+    <tbody>
+    {% for p in table %}
+      <tr>
+        <td class="num">{{ p.held }}</td>
+        <td>
+          <strong>{{ p.name }}</strong>
+          {% if p.position %}<span class="muted">{{ p.position }}</span>{% endif %}
+          {% if p.former %}<span class="tag-former">현재 명부에 없음</span>{% endif %}
+        </td>
+        <td class="num">{{ p.present }}</td>
+        <td class="num {{ 'warn' if p.absent }}">{{ p.absent }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="summary">{{ scope }} 출석을 기록한 회의 {{ recorded_count }}회 기준입니다. 회의개최일수는 임원별로 출석 기록이 있는 회의 수입니다.</p>
+{% else %}
+<div class="empty">
+  <p>{{ scope }}에 출석이 기록된 회의가 없습니다.<br>
+     각종 회의실적에서 회의의 [수정]을 눌러 임원 출석을 체크하고 저장하면 여기에 자동으로 나타납니다.</p>
+</div>
+{% endif %}
+
+{% if unrecorded %}
+<div class="notice no-print">
+  <strong>출석이 기록되지 않은 회의 {{ unrecorded|length }}회는 집계에 포함되지 않았습니다.</strong>
+  <ul>
+    {% for m in unrecorded %}
+      <li><a href="{{ url_for('meetings.list_view', year=m.year) }}">{{ m.held_at|kdt }} · {{ m.title }}</a></li>
+    {% endfor %}
+  </ul>
+  <p>회의 줄의 [수정] → 임원 출석 체크 → [저장]을 하면 반영됩니다.</p>
+</div>
+{% endif %}
+{% endblock %}
